@@ -1,0 +1,19 @@
+# Local Terraform directories
+.terraform/
+
+# Terraform state files
+*.tfstate
+*.tfstate.backup
+
+# Crash logs
+crash.log
+
+# Lock file (optional, depends on your workflow)
+.terraform.lock.hcl
+
+# IDE / OS specific files (optional but recommended)
+*.swp
+*.idea/
+*.vscode/
+*.DS_Store
+
