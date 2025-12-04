@@ -1,0 +1,101 @@
+
+
+---
+name: PostgreSQL 14 Setup on DB Servers
+  hosts: all
+  become: yes
+  vars:
+    pg_version: 14
+    pg_data_dir: /data/pgdata/14/data
+    pg_home_dir: /data/pgdata
+    #repo_url: "https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm"
+
+  tasks:
+
+    - name: Install PostgreSQL repository RPM
+      ansible.builtin.command: yum install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+
+    - name: Disable built-in PostgreSQL module
+      ansible.builtin.dnf:
+        name: postgresql
+        state: absent
+        module_hotfixes: true
+        enablerepo: pgdg
+
+    - name: Install PostgreSQL 14 and contrib packages
+      ansible.builtin.dnf:
+        name:
+          - postgresql{{ pg_version }}
+          - postgresql{{ pg_version }}-server
+          - postgresql{{ pg_version }}-contrib
+        state: present
+
+    - name: Create PostgreSQL data directory
+      ansible.builtin.file:
+        path: "{{ pg_data_dir }}"
+        owner: postgres
+        group: postgres
+        state: directory
+        mode: '0750'
+
+    - name: Create systemd override directory for PostgreSQL
+      ansible.builtin.file:
+        path: /etc/systemd/system/postgresql-{{ pg_version }}.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Create systemd override file for PostgreSQL
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/postgresql-{{ pg_version }}.service.d/override.conf
+        content: |
+          [Service]
+          Environment=PGDATA={{ pg_data_dir }}
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Initialize PostgreSQL database
+      ansible.builtin.command:
+        cmd: /usr/pgsql-{{ pg_version }}/bin/postgresql-{{ pg_version }}-setup initdb
+        creates: "{{ pg_data_dir }}/PG_VERSION"
+
+    - name: Change postgres user home directory
+      ansible.builtin.user:
+        name: postgres
+        home: "{{ pg_home_dir }}"
+
+    - name: Copy postgres user profile and history
+      ansible.builtin.copy:
+        src: /var/lib/pgsql/.bash_profile
+        dest: "{{ pg_home_dir }}/.bash_profile"
+        remote_src: yes
+
+    - name: Copy postgres user cache and config
+      ansible.builtin.copy:
+        src:
+          - /var/lib/pgsql/.bash_history
+          - /var/lib/pgsql/.cache
+          - /var/lib/pgsql/.config
+        dest: "{{ pg_home_dir }}/"
+        remote_src: yes
+        mode: preserve
+
+    - name: Start PostgreSQL service
+      ansible.builtin.systemd:
+        name: postgresql-{{ pg_version }}.service
+        state: started
+        enabled: yes
+
+    - name: Check PostgreSQL service status
+      ansible.builtin.systemd:
+        name: postgresql-{{ pg_version }}.service
+        state: started
+        enabled: yes
+        register: pg_status
+
+    - name: Debug PostgreSQL service status
+      ansible.builtin.debug:
+        var: pg_status
+
+
