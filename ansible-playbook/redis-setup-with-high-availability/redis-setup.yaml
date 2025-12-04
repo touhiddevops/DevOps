@@ -1,0 +1,144 @@
+```
+## Installtion Part all three/two nodes
+
+---
+- name: Setup Redis using Remi repository
+  hosts: mir_core_154
+  become: yes
+  tasks:
+
+
+    - name: Install EPEL repository RPM
+      ansible.builtin.command: yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
+    - name: Install Remi repository
+      ansible.builtin.command: yum install -y http://rpms.remirepo.net/enterprise/remi-release-9.0.rpm
+
+
+    - name: Install Redis from Remi repository (version 5.0)
+      ansible.builtin.dnf:
+        name: "@redis:remi-5.0"
+        state: present
+
+    - name: Create Redis data directory
+      ansible.builtin.file:
+        path: /data/redis-data
+        state: directory
+        owner: redis
+        group: redis
+        mode: '0755'
+
+    - name: Create Redis logs directory
+      ansible.builtin.file:
+        path: /data/redis-logs
+        state: directory
+        owner: redis
+        group: redis
+        mode: '0755'
+
+## Configuration Part all three/two nodes
+
+- name: Update Redis configuration using lineinfile
+  hosts: mir_core_154
+  become: true
+  tasks:
+    - name: Ensure Redis binds to all network interfaces
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^bind '
+        line: 'bind 0.0.0.0'
+        state: present
+        backup: yes
+
+    - name: Set Redis timeout to 0
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^timeout '
+        line: 'timeout 0'
+        state: present
+
+    - name: Set Redis logfile location
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^logfile '
+        line: 'logfile "/data/redis-logs/redis.log"'
+        state: present
+
+    - name: Set Redis data directory
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^dir '
+        line: 'dir "/data/redis-data"'
+        state: present
+
+    - name: Set Redis masterauth password
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^masterauth '
+        line: 'masterauth "1567f9b10954f2d2b2f2eee5c7f642ca7dfb14da"'
+        state: present
+
+    - name: Set Redis requirepass password
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^requirepass '
+        line: 'requirepass "1567f9b10954f2d2b2f2eee5c7f642ca7dfb14da"'
+        state: present
+
+    - name: Set Redis replica-priority for master
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^replica-priority '
+        line: 'replica-priority 100'
+        state: present
+
+    - name: Set Redis maximum memory to 12GB
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^maxmemory '
+        line: 'maxmemory 5gb'
+        state: present
+
+    - name: Set Redis maxmemory-policy to volatile-lru
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^maxmemory-policy '
+        line: 'maxmemory-policy volatile-lru'
+        state: present
+
+    - name: Set Redis client-output-buffer-limit for replica
+      ansible.builtin.lineinfile:
+        path: /etc/redis.conf
+        regexp: '^client-output-buffer-limit replica '
+        line: 'client-output-buffer-limit replica 1gb 1gb 60'
+        state: present
+
+
+## Redis Slave configuration
+
+- name: Redis Node config-2
+  hosts: mir_core_154
+  become: yes
+  gather_facts: no
+  vars:
+    MASTER: 192.168.150.152
+  tasks:
+  - name: "[REDIS Slave Configuration Only On Slaves Nodes]"
+    lineinfile:
+      path: /etc/redis.conf
+      regexp: '^# replicaof'
+      line: replicaof {{ MASTER }} 6379
+      state: present
+
+## Redis all Node Service start and enable
+
+- name: Redis Service start and enable
+  hosts: 192.168.150.152,192.168.150.153,192.168.150.154
+  become: yes
+  gather_facts: no
+  tasks:
+   - name: "[REDIS Service Enable At OS Boot]"
+     service:
+      name: redis
+      state: started
+      enabled: true
